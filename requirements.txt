@@ -1,0 +1,7 @@
+pyrogram
+tgcrypto
+flask
+gunicorn
+requests
+aiohttp
+pymongo
