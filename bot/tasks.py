@@ -30,8 +30,7 @@ async def handle_mirror(client, message):
     uploading_msg = await message.reply("Uploading to PixelDrain...")
     try:
         pid = pixeldrain.upload_file(path, filename)
-        await uploading_msg.edit(f"Uploaded!
-PixelDrain: https://pixeldrain.com/u/{pid}")
+        await uploading_msg.edit(f"Uploaded!\nPixelDrain: https://pixeldrain.com/u/{pid}")
     except Exception as e:
         await uploading_msg.edit(f"Failed to upload: {e}")
     finally:
@@ -55,8 +54,7 @@ async def handle_leech(client, message, is_reply=False):
             await send_zip_contents(client, message, file)
             os.remove(file)
         else:
-            await message.reply_document(file, caption=f"Here is your file:
-{filename}")
+            await message.reply_document(file, caption=f"Here is your file:\n{filename}")
             os.remove(file)
         return
     elif url:
@@ -68,8 +66,7 @@ async def handle_leech(client, message, is_reply=False):
             await send_zip_contents(client, message, temp.name)
             os.remove(temp.name)
         else:
-            await message.reply_document(temp.name, caption=f"Here is your file:
-{filename}")
+            await message.reply_document(temp.name, caption=f"Here is your file:\n{filename}")
             os.remove(temp.name)
     else:
         await message.reply("Send a link or reply to a document.")
@@ -92,7 +89,8 @@ async def download_url(url, dest, reply_message):
             downloaded = 0
             with open(dest, 'wb') as f:
                 async for chunk in resp.content.iter_chunked(10240):
-                    if not chunk: break
+                    if not chunk:
+                        break
                     f.write(chunk)
                     downloaded += len(chunk)
                     # Only try to update bot's own reply message!
