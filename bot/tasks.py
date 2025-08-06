@@ -39,8 +39,7 @@ async def handle_mirror(client, message):
         filename = resp.text
 
     pid = pixeldrain.upload_file(path, filename)
-    await reply.edit(f"Uploaded!
-PixelDrain: https://pixeldrain.com/u/{pid}")
+    await reply.edit(f"Uploaded!\nPixelDrain: https://pixeldrain.com/u/{pid}")
     os.remove(path)
 
 async def handle_leech(client, message, is_reply=False):
@@ -95,7 +94,8 @@ async def download_url(url, dest, message=None):
             downloaded = 0
             with open(dest, 'wb') as f:
                 async for chunk in resp.content.iter_chunked(10240):
-                    if not chunk: break
+                    if not chunk:
+                        break
                     f.write(chunk)
                     downloaded += len(chunk)
                     if message:
@@ -110,8 +110,10 @@ async def handle_status(message):
 async def handle_thumb(client, message):
     thumb_id = database.get_thumb(message.from_user.id)
     if thumb_id:
-        await message.reply_photo(thumb_id, caption="Current thumbnail.
-Send new photo, or reply /no to keep.")
+        await message.reply_photo(
+            thumb_id,
+            caption="Current thumbnail.\nSend new photo, or reply /no to keep."
+        )
         resp = await client.ask(message.chat.id, "Send new thumbnail or /no:", timeout=60)
         if resp.text == "/no":
             return
