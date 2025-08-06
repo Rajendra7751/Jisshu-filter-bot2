@@ -14,8 +14,9 @@ HELP_TEXT = """
 """
 
 def human_readable_size(size):
-    if size < 1024: return f"{size}B"
-    for unit in ['KiB','MiB','GiB','TiB']:
+    if size < 1024:
+        return f"{size}B"
+    for unit in ['KiB', 'MiB', 'GiB', 'TiB']:
         size /= 1024.0
         if size < 1024:
             return f"{size:.2f}{unit}"
@@ -30,6 +31,8 @@ def format_status(filename, total, done, speed, eta):
     bar = progress_bar_string(done / total if total else 0)
     size_str = f"{human_readable_size(done)}/{human_readable_size(total)}"
     speed_str = f"{human_readable_size(speed)}/s" if speed else "?"
-    return f"{bar} {size_str}
-Speed: {speed_str} | ETA: {eta}s
-{filename}"
+    return (
+        f"{bar} {size_str}\n"
+        f"Speed: {speed_str} | ETA: {eta}s\n"
+        f"{filename}"
+    )
