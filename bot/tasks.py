@@ -11,36 +11,32 @@ async def handle_mirror(client, message):
     args = message.text.split(maxsplit=1)
     orig_link = ""
     if message.reply_to_message and message.reply_to_message.document:
-        file_message = message.reply_to_message
-        file = await file_message.download()
-        orig_link = None
+        file = await message.reply_to_message.download()
+        filename = message.reply_to_message.document.file_name
+        path = file
     elif len(args) > 1:
         orig_link = args[1].strip()
+        temp = tempfile.NamedTemporaryFile(delete=False)
+        reply = await message.reply("Downloading from URL...")
+        await download_url(orig_link, temp.name, reply)
+        filename = os.path.basename(temp.name)
+        path = temp.name
     else:
         await message.reply("Send /mirror [link] or reply to a file.")
         return
 
-    reply = await message.reply("Processing file...")
-    filename = None
-
-    if orig_link:  # Download from URL
-        temp = tempfile.NamedTemporaryFile(delete=False)
-        await download_url(orig_link, temp.name, reply)
-        filename = os.path.basename(temp.name)
-        path = temp.name
-    else:  # Telegram file
-        file = await message.reply_to_message.download()
-        filename = message.reply_to_message.document.file_name
-        path = file
-
-    # Ask for rename
-    resp = await client.ask(message.chat.id, "Send new filename or 'no' to keep original:", reply_to_message_id=reply.id, timeout=60)
-    if resp.text.lower() != "no":
-        filename = resp.text
-
-    pid = pixeldrain.upload_file(path, filename)
-    await reply.edit(f"Uploaded!\nPixelDrain: https://pixeldrain.com/u/{pid}")
-    os.remove(path)
+    # SKIP filename prompt for now
+    # Just use detected/original filename
+    uploading_msg = await message.reply("Uploading to PixelDrain...")
+    try:
+        pid = pixeldrain.upload_file(path, filename)
+        await uploading_msg.edit(f"Uploaded!
+PixelDrain: https://pixeldrain.com/u/{pid}")
+    except Exception as e:
+        await uploading_msg.edit(f"Failed to upload: {e}")
+    finally:
+        if os.path.exists(path):
+            os.remove(path)
 
 async def handle_leech(client, message, is_reply=False):
     args = message.text.split()
@@ -51,58 +47,62 @@ async def handle_leech(client, message, is_reply=False):
     elif len(args) > 1:
         extract = args[1] == "-e"
         url = args[1] if not extract else None
-    else:
-        url = None
 
-    paths = []
-    if is_reply and message.reply_to_message.document:
+    if is_reply and message.reply_to_message and message.reply_to_message.document:
         file = await message.reply_to_message.download()
+        filename = message.reply_to_message.document.file_name
         if extract and zipfile.is_zipfile(file):
-            with zipfile.ZipFile(file, 'r') as z:
-                paths = z.namelist()
-                z.extractall("/tmp/leechzip")
+            await send_zip_contents(client, message, file)
             os.remove(file)
-            for f in paths:
-                await client.send_document(message.chat.id, f"/tmp/leechzip/{f}", thumb=database.get_thumb(message.from_user.id))
-            for f in paths:
-                os.remove(f"/tmp/leechzip/{f}")
-        else:  # No extract
-            await client.send_document(message.chat.id, file, thumb=database.get_thumb(message.from_user.id))
+        else:
+            await message.reply_document(file, caption=f"Here is your file:
+{filename}")
             os.remove(file)
         return
     elif url:
         temp = tempfile.NamedTemporaryFile(delete=False)
-        await download_url(url, temp.name, message)
+        reply = await message.reply(f"Downloading from {url}...")
+        await download_url(url, temp.name, reply)
+        filename = os.path.basename(temp.name)
         if extract and zipfile.is_zipfile(temp.name):
-            with zipfile.ZipFile(temp.name, 'r') as z:
-                paths = z.namelist()
-                z.extractall("/tmp/leechzip")
+            await send_zip_contents(client, message, temp.name)
             os.remove(temp.name)
-            for f in paths:
-                await client.send_document(message.chat.id, f"/tmp/leechzip/{f}", thumb=database.get_thumb(message.from_user.id))
-                os.remove(f"/tmp/leechzip/{f}")
         else:
-            await client.send_document(message.chat.id, temp.name, thumb=database.get_thumb(message.from_user.id))
+            await message.reply_document(temp.name, caption=f"Here is your file:
+{filename}")
             os.remove(temp.name)
     else:
         await message.reply("Send a link or reply to a document.")
 
-async def download_url(url, dest, message=None):
+async def send_zip_contents(client, message, zip_path):
+    with zipfile.ZipFile(zip_path, 'r') as z:
+        z.extractall("/tmp/leechzip")
+        files = [os.path.join("/tmp/leechzip", f) for f in z.namelist()]
+        for file in files:
+            if os.path.isdir(file):
+                continue
+            await message.reply_document(file, caption=f"Extracted: {os.path.basename(file)}")
+            os.remove(file)
+        os.rmdir("/tmp/leechzip")
+
+async def download_url(url, dest, reply_message):
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as resp:
             size = int(resp.headers.get('content-length', 0))
             downloaded = 0
             with open(dest, 'wb') as f:
                 async for chunk in resp.content.iter_chunked(10240):
-                    if not chunk:
-                        break
+                    if not chunk: break
                     f.write(chunk)
                     downloaded += len(chunk)
-                    if message:
+                    # Only try to update bot's own reply message!
+                    if reply_message:
                         pct = downloaded / size if size else 0
-                        speed = int(len(chunk) / 1)
                         bar = utils.progress_bar_string(pct)
-                        await message.edit(f"{bar} ({utils.human_readable_size(downloaded)}/{utils.human_readable_size(size)})")
+                        try:
+                            await reply_message.edit(f"{bar} ({utils.human_readable_size(downloaded)}/{utils.human_readable_size(size)})")
+                        except Exception:
+                            pass  # Don't crash on edit errors
 
 async def handle_status(message):
     await message.reply("All queued/leech/mirror tasks are running. (Add per-user tracking if needed)")
@@ -110,25 +110,11 @@ async def handle_status(message):
 async def handle_thumb(client, message):
     thumb_id = database.get_thumb(message.from_user.id)
     if thumb_id:
-        await message.reply_photo(
-            thumb_id,
-            caption="Current thumbnail.\nSend new photo, or reply /no to keep."
-        )
-        resp = await client.ask(message.chat.id, "Send new thumbnail or /no:", timeout=60)
-        if resp.text == "/no":
-            return
-        elif resp.photo:
-            database.set_thumb(message.from_user.id, resp.photo.file_id)
-            await message.reply("Thumbnail updated! 🚀")
+        await message.reply_photo(thumb_id, caption="Current thumbnail. To update: currently not supported (prompt removed).")
+        # For now, not supporting in-chat change prompt. FSM needed.
     else:
-        msg = await client.ask(message.chat.id, "Send an image or image URL…", timeout=60)
-        if msg.photo:
-            database.set_thumb(message.from_user.id, msg.photo.file_id)
-            await message.reply("Thumbnail set!")
-        elif msg.text:
-            # You could support custom download of thumb by URL here if desired.
-            await message.reply("Send photo as image (not URL) for now.")
+        await message.reply("Send an image to set a thumbnail (feature coming soon).")
 
 async def cancel_all(user_id):
-    # For future: add task cancelling per user (if using custom queues)
+    # For future: add task cancelling per user (if tracking jobs)
     pass
