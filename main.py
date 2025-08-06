@@ -1,5 +1,6 @@
 import os
 import threading
+import asyncio
 from flask import Flask
 from pyrogram import Client
 from bot.handlers import register_handlers
@@ -15,10 +16,10 @@ def root():
     return "Bot is running!"
 
 def start_pyrogram():
+    asyncio.set_event_loop(asyncio.new_event_loop())  # Add this line!
     client = Client("bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN, workers=8)
     register_handlers(client)
     client.run()
-
 if __name__ == "__main__":
     threading.Thread(target=start_pyrogram).start()
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 8080)))
