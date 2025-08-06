@@ -1,7 +1,7 @@
 import os
 import asyncio
 from pyrogram import filters
-from pyrogram.types import Message, InputMediaDocument
+from pyrogram.types import Message
 from . import utils, pixeldrain, database, tasks
 
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
@@ -19,11 +19,8 @@ def register_handlers(app):
     @admin_only
     async def start(_, message):
         await message.reply(
-            "👋 Hi! *[Your Name]*
-
-"
-            "Use me to mirror and leech files to PixelDrain!
-"
+            "👋 Hi! *[Your Name]*\n\n"
+            "Use me to mirror and leech files to PixelDrain!\n\n"
             "/help — Full usage"
         )
 
